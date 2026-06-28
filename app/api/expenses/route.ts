@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, FuelExpense } from '@/lib/db';
+import { getDb, FuelExpense, COLLECTION } from '@/lib/db';
+import type { Query, CollectionReference } from 'firebase-admin/firestore';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,38 +10,35 @@ export async function GET(request: NextRequest) {
     const year = searchParams.get('year');
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '10', 10);
-    const offset = (page - 1) * pageSize;
 
-    let query = 'SELECT * FROM fuel_expenses';
-    const conditions: string[] = [];
-    const params: (string | number)[] = [];
+    let query: Query | CollectionReference = db.collection(COLLECTION);
 
     if (year && month) {
-      conditions.push("strftime('%Y-%m', date) = ?");
-      params.push(`${year}-${month.padStart(2, '0')}`);
+      const monthStr = `${year}-${month.padStart(2, '0')}`;
+      query = query
+        .where('date', '>=', `${monthStr}-01`)
+        .where('date', '<=', `${monthStr}-31`);
     } else if (year) {
-      conditions.push("strftime('%Y', date) = ?");
-      params.push(year);
+      query = query
+        .where('date', '>=', `${year}-01-01`)
+        .where('date', '<=', `${year}-12-31`);
     }
 
-    if (conditions.length > 0) {
-      query += ' WHERE ' + conditions.join(' AND ');
-    }
+    query = query.orderBy('date', 'desc');
 
-    const countQuery = `SELECT COUNT(*) as total FROM fuel_expenses${conditions.length > 0 ? ' WHERE ' + conditions.join(' AND ') : ''}`;
-    const totalResult = db.prepare(countQuery).get(...params) as { total: number };
+    const snapshot = await query.get();
+    const allDocs = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FuelExpense));
 
-    query += ' ORDER BY date DESC, id DESC LIMIT ? OFFSET ?';
-    params.push(pageSize, offset);
-
-    const expenses = db.prepare(query).all(...params) as FuelExpense[];
+    const total = allDocs.length;
+    const start = (page - 1) * pageSize;
+    const expenses = allDocs.slice(start, start + pageSize);
 
     return NextResponse.json({
       expenses,
-      total: totalResult.total,
+      total,
       page,
       pageSize,
-      totalPages: Math.ceil(totalResult.total / pageSize),
+      totalPages: Math.ceil(total / pageSize),
     });
   } catch (error) {
     console.error('GET /api/expenses error:', error);
@@ -64,20 +62,26 @@ export async function POST(request: NextRequest) {
     const total_cost = parseFloat((parseFloat(liters) * parseFloat(price_per_liter)).toFixed(2));
     const created_at = new Date().toISOString();
 
-    const result = db.prepare(`
-      INSERT INTO fuel_expenses (date, liters, price_per_liter, total_cost, odometer, notes, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    const docRef = await db.collection(COLLECTION).add({
       date,
-      parseFloat(liters),
-      parseFloat(price_per_liter),
+      liters: parseFloat(liters),
+      price_per_liter: parseFloat(price_per_liter),
       total_cost,
-      odometer ? parseInt(odometer) : null,
-      notes || null,
-      created_at
-    );
+      odometer: odometer ? parseInt(odometer) : null,
+      notes: notes || null,
+      created_at,
+    });
 
-    const expense = db.prepare('SELECT * FROM fuel_expenses WHERE id = ?').get(result.lastInsertRowid) as FuelExpense;
+    const expense: FuelExpense = {
+      id: docRef.id,
+      date,
+      liters: parseFloat(liters),
+      price_per_liter: parseFloat(price_per_liter),
+      total_cost,
+      odometer: odometer ? parseInt(odometer) : null,
+      notes: notes || null,
+      created_at,
+    };
 
     return NextResponse.json(expense, { status: 201 });
   } catch (error) {

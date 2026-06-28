@@ -1,0 +1,12 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "fuel_expenses",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

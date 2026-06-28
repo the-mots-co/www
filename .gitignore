@@ -35,6 +35,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# SQLite WAL files
+# SQLite / local DB files
+*.db
 *.db-shm
 *.db-wal
+
+# Firebase service account keys (never commit)
+*serviceAccountKey*.json

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import MonthlyChart from '@/components/MonthlyChart';
+import { getCurrentMonthStats, getLast6MonthsChart } from '@/lib/stats';
 
 const MONTH_NAMES: Record<string, string> = {
   '01': 'Janeiro', '02': 'Fevereiro', '03': 'Março', '04': 'Abril',
@@ -16,41 +17,19 @@ function formatMonth(monthStr: string) {
   return `${MONTH_NAMES[month] || month} ${year}`;
 }
 
-interface StatsData {
-  currentMonth: {
-    month: string;
-    total_spend: number;
-    total_liters: number;
-    avg_price: number;
-    fill_count: number;
-  };
-  monthlyChart: {
-    month: string;
-    total_spend: number;
-    total_liters: number;
-    fill_count: number;
-  }[];
-}
-
-async function getStats(): Promise<StatsData> {
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-  const res = await fetch(`${baseUrl}/api/stats`, { cache: 'no-store' });
-  if (!res.ok) throw new Error('Erro ao buscar estatísticas');
-  return res.json();
-}
-
 export default async function DashboardPage() {
-  let stats: StatsData | null = null;
+  let currentMonth: Awaited<ReturnType<typeof getCurrentMonthStats>> | null = null;
+  let chartData: Awaited<ReturnType<typeof getLast6MonthsChart>> = [];
   let fetchError = '';
 
   try {
-    stats = await getStats();
+    [currentMonth, chartData] = await Promise.all([
+      getCurrentMonthStats(),
+      getLast6MonthsChart(),
+    ]);
   } catch {
     fetchError = 'Não foi possível carregar as estatísticas.';
   }
-
-  const currentMonth = stats?.currentMonth;
-  const chartData = stats?.monthlyChart || [];
 
   return (
     <div className="space-y-6">

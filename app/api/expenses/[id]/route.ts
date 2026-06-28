@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { getDb, COLLECTION } from '@/lib/db';
 
 export async function DELETE(
   _request: NextRequest,
@@ -7,18 +7,20 @@ export async function DELETE(
 ) {
   try {
     const db = getDb();
-    const id = parseInt(params.id, 10);
+    const { id } = params;
 
-    if (isNaN(id)) {
+    if (!id) {
       return NextResponse.json({ error: 'ID inválido' }, { status: 400 });
     }
 
-    const existing = db.prepare('SELECT id FROM fuel_expenses WHERE id = ?').get(id);
-    if (!existing) {
+    const docRef = db.collection(COLLECTION).doc(id);
+    const doc = await docRef.get();
+
+    if (!doc.exists) {
       return NextResponse.json({ error: 'Registro não encontrado' }, { status: 404 });
     }
 
-    db.prepare('DELETE FROM fuel_expenses WHERE id = ?').run(id);
+    await docRef.delete();
 
     return NextResponse.json({ message: 'Registro excluído com sucesso' });
   } catch (error) {
